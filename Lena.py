@@ -50,6 +50,7 @@ class Loss:  # TODO Rewrite/Get rid of it somehow
 class BinaryCrossEntropy(Loss):
     @staticmethod
     def f(x, y):
+        x = np.transpose(x, (0, 2, 3, 1))
         res = np.zeros_like(x)
         x += 10**(-10)
         for batch_el in range(np.shape(res)[0]):
@@ -70,11 +71,12 @@ class BinaryCrossEntropy(Loss):
 
     @staticmethod
     def df(x, y):
+        x = np.transpose(x, (0, 2, 3, 1))
         res = np.zeros_like(x)
         x += 10**(-10)
         for batch_el in range(np.shape(res)[0]):
             res[batch_el] = (-y[batch_el] / (x[batch_el] + 10**(-7)) + (1 - y[batch_el]) / (1 - x[batch_el] - 10**(-7))) / np.size(res[batch_el])
-        return res
+        return np.transpose(res, (0, 3, 1, 2))
 
 
 class Sigmoid:
@@ -212,13 +214,16 @@ class Dense(Layer):
         self.jac_to_go = None
 
     def ForwardProp(self, inputs):
-        self.x = np.reshape(inputs, (np.shape(inputs)[0], 1, 1, -1))  # (batch_size; 1; 1; input)
-        self.y = np.transpose(np.dot(self.w, np.transpose(self.x, (0, 1, 3, 2))), (1, 2, 3, 0)) + self.b * int(self.use_bias)
-        self.dy_dw = np.transpose(np.ones((np.shape(self.w)[0], np.shape(self.x)[0], np.shape(self.w)[1])) * self.x[:, 0, 0, :], (1, 0, 2))
+        self.x = inputs  # (batch_size; input; 1; 1)
+        self.y = np.transpose(
+                np.transpose(np.dot(self.w, np.transpose(self.x, (0, 2, 1, 3))), (1, 2, 3, 0)) + self.b * int(self.use_bias),
+                (0, 3, 1, 2)
+                )
+        self.dy_dw = np.transpose(np.ones((np.shape(self.w)[0], np.shape(self.x)[0], np.shape(self.w)[1])) * self.x[:, :, 0, 0], (1, 0, 2))
         self.dy_db = np.ones((np.shape(self.x)[0], np.shape(self.b)[0])) * int(self.use_bias)
 
     def BackProp(self, der_w, der_b, jac):
-        jac = jac[:, 0, 0, :]
+        jac = jac[:, :, 0, 0]
         df_dw = np.reshape(np.average(np.transpose(np.transpose(self.dy_dw, (2, 0, 1)) * jac, (1, 2, 0)), axis=0), -1)
         df_db = np.reshape(np.average(self.dy_db * jac, axis=0), -1)
         der_w.append(df_dw)
@@ -226,7 +231,7 @@ class Dense(Layer):
         self.der_w = der_w
         self.der_b = der_b
         self.jac_to_go = np.transpose(np.dot(np.transpose(self.w), np.transpose(jac)))
-        self.jac_to_go = self.jac_to_go[:, np.newaxis, np.newaxis, :]
+        self.jac_to_go = self.jac_to_go[:, :, np.newaxis, np.newaxis]
 
     def Initializer(self, prev_lay, next_lay, init_type):
         init = super().initializer_dic[init_type]
@@ -454,7 +459,10 @@ class Input(Layer):
             self.channels = self.out_dim[0]
 
     def ForwardProp(self, inputs):
-        self.y = inputs
+        if isinstance(self.out_dim, int):
+            self.y = inputs[:, :, np.newaxis, np.newaxis]
+        else:
+            self.y = inputs
 
     def BackProp(self, der_w, der_b, jac):
         self.der_w = der_w
@@ -535,19 +543,3 @@ class Model:
             print(self.loss_func.f(self.model[len(self.model) - 1].y, batch_labels))
 
         return self.loss_func.f(self.model[len(self.model) - 1].y, batch_labels)
-
-if __name__ == "__main__":
-    model = Model()
-    model.add(Input((3, 15, 15)))
-    model.add(Convolution2d([5, 3, 3], [1, 1, 1, 1], padding='SAME'))
-    model.add(Activation('sigmoid'))
-    model.add(MaxPooling((3, 3)))
-    model.add(Convolution2d([8, 5, 5], [1, 1, 1, 1], padding='VALID'))
-    model.add(Activation('tanh'))
-    model.add(Dense(10))
-    model.add(Activation('relu'))
-    model.add(Dropout(0.78))
-    model.add(Dense(1))
-    model.add(Activation('sigmoid'))
-    model.comp('gradient_descent', 'binary_crossentropy', 'xavier')
-    print(model.fit(np.random.uniform(0, 10, size=[10, 3, 15, 15]), np.random.uniform(0, 1, size=[10, 1]), batch_size=1))

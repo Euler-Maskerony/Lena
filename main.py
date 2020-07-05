@@ -1,6 +1,6 @@
 import numpy as np
 import mnist
-from LENA import Activation, Dense, Dropout, Model, Convolution2d, MaxPooling, AveragePooling, Input
+from Lena import Activation, Dense, Dropout, Model, Convolution2d, MaxPooling, AveragePooling, Input
 
 x_test = mnist.download_and_parse_mnist_file('t10k-images-idx3-ubyte.gz', 'data/')
 y_test = mnist.download_and_parse_mnist_file('t10k-labels-idx1-ubyte.gz', 'data/')
