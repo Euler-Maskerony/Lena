@@ -2,6 +2,8 @@
 
 import numpy as np
 from math import e, ceil
+import os
+import datetime
 
 
 def ext_dot(a, b):
@@ -43,13 +45,15 @@ class Optimizer:
         return self.model
 
 
-class Loss:  # TODO Rewrite/Get rid of it somehow
-    pass
+class Loss:
+    def __init__(self):
+        self.acc = None
+        self.model_results = None
+        self.reference_results = None
 
 
 class BinaryCrossEntropy(Loss):
-    @staticmethod
-    def f(x, y):
+    def f(self, x, y):
         x = np.transpose(x, (0, 2, 3, 1))
         res = np.zeros_like(x)
         x += 10**(-10)
@@ -57,16 +61,7 @@ class BinaryCrossEntropy(Loss):
             res[batch_el] = -y[batch_el] * np.log(x[batch_el]) - (1 - y[batch_el]) * np.log(1 - x[batch_el])
             res[batch_el] = np.sum(res[batch_el])
         res = np.average(res)
-        res_x = np.argmax(np.reshape(x, (np.shape(x)[0], -1)), axis=1)
-        res_y = np.argmax(np.reshape(y, (np.shape(y)[0], -1)), axis=1)
-        acc = np.zeros(np.shape(res_x)[0], dtype=bool)
-        for batch_el in range(np.shape(res_x)[0]):
-            acc[batch_el] = np.array_equal(res_x[batch_el], res_y[batch_el])
-
-        print(res_x)
-        print(res_y)
-        print('Accuracy:')
-        print(np.average(acc))
+        self.results(x, y)
         return res
 
     @staticmethod
@@ -77,6 +72,17 @@ class BinaryCrossEntropy(Loss):
         for batch_el in range(np.shape(res)[0]):
             res[batch_el] = (-y[batch_el] / (x[batch_el] + 10**(-7)) + (1 - y[batch_el]) / (1 - x[batch_el] - 10**(-7))) / np.size(res[batch_el])
         return np.transpose(res, (0, 3, 1, 2))
+
+    def accuracy(self):
+        self.acc = np.zeros(np.shape(self.model_results)[0], dtype=bool)
+        for batch_el in range(np.shape(self.model_results)[0]):
+            self.acc[batch_el] = np.array_equal(self.model_results[batch_el], self.reference_results[batch_el])
+        self.acc = np.average(self.acc)
+        return self.acc
+
+    def results(self, x, y):
+        self.model_results = np.argmax(np.reshape(x, (np.shape(x)[0], -1)), axis=1)
+        self.reference_results = np.argmax(np.reshape(y, (np.shape(y)[0], -1)), axis=1)
 
 
 class Sigmoid:
@@ -403,7 +409,7 @@ class Convolution2d(Layer):
         return output, dout_dw
 
     def ForwardProp(self, inputs):
-        self.x = np.array(inputs)  # TODO Get it back
+        self.x = inputs
         if self.padding == 'SAME':
             row_frame = (self.kernel_dim[2] - 1) // 2
             col_frame = (self.kernel_dim[3] - 1) // 2
@@ -499,6 +505,12 @@ class Model:
         self.grad_w = 5  # Weights gradient vector for loss function
         self.grad_b = 5  # Biases gradient vector for loss function
         self.grad = 5  # Common gradient vector for loss function
+        self.max_iter = None  # Maximum number of iteration during trainig process
+        self.loss = 100
+        self.acc = 0
+        self.model_output = None
+        self.iter_start_time = 0
+        self.start_time = 0
 
     def add(self, layer):
         self.model.append(layer)
@@ -512,20 +524,20 @@ class Model:
         self.loss_func = self.loss_dic[loss]
         self.optimimzer = Optimizer(optimizer, self.model)
 
-    def fit(self, train_data, train_labels, batch_size=4):
-        if np.shape(train_data) == 2:
-            train_data = train_data[:, np.newaxis, np.newaxis, :]
-        while np.linalg.norm(self.grad) > 0.01:
+    def fit(self, train_data, train_labels, val_data, early_stopping=lambda *args: True, batch_size=1, max_iter=100):
+        self.start_time = datetime.datetime.now()
+        iteration = 0
+        self.max_iter = max_iter
+        while iteration <= self.max_iter and early_stopping(val_data, self.model, self.loss_func, self.max_iter, (self.start_time, self.iter_start_time)):
+            self.iter_start_time = datetime.datetime.now()
             # Batch sampling
             indices = np.random.choice(np.array(range(np.shape(train_data)[0])), size=batch_size, replace=False)
             batch_data = train_data[indices]
             batch_labels = train_labels[indices]
             # Forward propagation
-            self.model[0].ForwardProp(batch_data)
-            for i in range(1, len(self.model)):
-                self.model[i].ForwardProp(self.model[i - 1].y)
+            self.exploit(batch_data)
             # Back propagation
-            self.model[i].BackProp(self.loss_func.df(self.model[i].y, batch_labels))
+            self.model[len(self.model)-1].BackProp(self.loss_func.df(self.model_output, batch_labels))
             for i in range(len(self.model) - 2, -1, -1):
                 self.model[i].BackProp(
                     self.model[i + 1].der_w,
@@ -537,9 +549,115 @@ class Model:
             self.model = self.optimimzer(jac_w=self.grad_w, jac_b=self.grad_b, step=0.5)
             self.der_w.clear()
             self.der_b.clear()
-            self.grad = np.hstack(tuple(self.grad_w))
-            if self.grad_b.size > 0:
-                self.grad = np.hstack((self.grad, np.hstack(tuple(self.grad_b))))
-            print(self.loss_func.f(self.model[len(self.model) - 1].y, batch_labels))
+            iteration += 1
 
-        return self.loss_func.f(self.model[len(self.model) - 1].y, batch_labels)
+    def exploit(self, data):
+        self.model[0].ForwardProp(data)
+        for i in range(1, len(self.model)):
+            self.model[i].ForwardProp(self.model[i - 1].y)
+        self.model_output = self.model[len(self.model) - 1].y
+
+class EarlyStopping(Model):
+    def __init__(self, monitor='val_loss', min_delta=0, patience=0, verbose=False, mode='auto', delay=1):
+        self.monitor = monitor
+        self.min_delta = min_delta
+        self.patience = patience
+        self.verbose = verbose
+        self.mode = mode
+        self.delay = delay
+        self.mon_value = None
+        self.full_mon_value = None
+        self.prev_mon_value = None
+        self.average_mon_value = 0
+        self.iter_to_abort = self.patience
+        self.iteration = -1
+        self.is_changing = True
+        self.speed = 0
+        self.speed_now = None
+        assert not ((self.monitor != 'val_loss' and self.monitor != 'val_acc') or \
+            (self.mode != 'auto' and self.mode != 'min' and self.mode != 'max')), 'Wrong value.'
+        if (self.mode == 'auto' and self.monitor == 'val_loss') or self.mode == 'min':
+            self.changing_dir = 1
+            self.full_mon_value = 'Loss on validation data'
+            self.prev_mon_value = 1000
+        else:
+            self.changing_dir = -1
+            self.full_mon_value = 'Accuracy on validation data'
+            self.prev_mon_value = 0
+
+    def __call__(self, val_data, *args):  # args[0] - model; args[1] - loss_func; args[2] - max_iter; args[3] - (start_time, iter_start_time)
+        if self.iteration == -1:
+            self.iteration += 1
+            self.loss_func = args[1]
+            self.max_iter = args[2]
+            return True
+        self.start_time = args[3][0]
+        self.iter_start_time = args[3][1]
+        self.model = args[0]
+        self.iteration += 1
+        self.exploit(val_data[0])
+        self.loss_func.results(self.model_output, val_data[1])
+        if self.monitor == 'val_loss':
+            self.mon_value = round(self.loss_func.f(self.model[len(self.model) - 1].y, val_data[1]), 4)
+        else:
+            self.mon_value = round(self.loss_func.accuracy()*100, 4)
+        self.average_mon_value += self.mon_value / self.delay
+        if self.verbose:
+            return self._verbose_is_changing()
+        else:
+            return self._is_changing()
+
+    def _verbose_is_changing(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print('Epoch %d/%d:' % (self.iteration, self.max_iter))
+        print('%s: %d' % (self.full_mon_value, self.mon_value))
+        res = self._is_changing()
+        if self.iteration % self.delay == 0:
+            print('Is changing: ' + str(self.is_changing))
+            if not self.is_changing:
+                print('Iterations to stop left: %d' % (self.iter_to_abort))
+            else:
+                print('Iterations to stop left: N/A')
+        else:
+            print('Is changing: /%s/ *Not updated* Update after %d epochs' % (str(self.is_changing), self.delay-(self.iteration % self.delay)))
+            if self.iter_to_abort == self.patience:
+                print('Iterations to stop left: N/A')
+            else:
+                print('Iterations to stop left: %d' % (self.iter_to_abort))
+        self.progress_bar()
+        return res
+
+    def _is_changing(self):
+        if self.iteration % self.delay == 0:
+            self.is_changing = (self.prev_mon_value - self.average_mon_value) * self.changing_dir >= self.min_delta
+            if not self.is_changing and self.iter_to_abort != 0:
+                self.iter_to_abort -= 1
+                self.average_mon_value = 0
+                return True
+            elif not self.is_changing and self.iter_to_abort == 0:
+                return False
+            else:
+                self.iter_to_abort = self.patience
+                self.prev_mon_value = self.average_mon_value
+                self.average_mon_value = 0
+                return True
+        else:
+            return True
+
+    def progress_bar(self):
+        self.iter_time = datetime.datetime.now() - self.iter_start_time
+        self.iter_time_int = self.iter_time.seconds + self.iter_time.microseconds * 10**(-6)
+        try:
+            self.iter_time_int += self.iter_time.minutes * 60
+            self.iter_time_int += self.iter_time.hours * 3600
+        except Exception:
+            pass
+        self.speed_now = 1 / self.iter_time_int
+        self.percentage = round(self.iteration / self.max_iter * 100)
+        self.speed = round(self.speed_now * 0.7 + self.speed * 0.3, 2)
+        self.time_left = datetime.timedelta(seconds=(self.max_iter - self.iteration) / self.speed)
+        self.time_pass = datetime.datetime.now() - self.start_time
+        print()
+        print('[' + '='*self.percentage + ' '*(100-self.percentage) + ']')
+        print('Estimated time to reach max_iter point: ' + str(self.time_left))
+        print('Time passed: ' + str(self.time_pass))
