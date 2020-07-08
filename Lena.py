@@ -7,7 +7,7 @@ import datetime
 
 
 def ext_dot(a, b):
-    res = np.zeros((a.shape[0], a.shape[1], b.shape[1]))
+    res = np.zeros((a.shape[0], a.shape[1], b.shape[1]), dtype='float64')
     for batch_el in range(res.shape[0]):
         for col in range(res.shape[1]):
             for row in range(res.shape[2]):
@@ -55,7 +55,7 @@ class Loss:
 class BinaryCrossEntropy(Loss):
     def f(self, x, y):
         x = np.transpose(x, (0, 2, 3, 1))
-        res = np.zeros_like(x)
+        res = np.zeros_like(x, dtype='float64')
         x += 10**(-10)
         for batch_el in range(np.shape(res)[0]):
             res[batch_el] = -y[batch_el] * np.log(x[batch_el]) - (1 - y[batch_el]) * np.log(1 - x[batch_el])
@@ -67,7 +67,7 @@ class BinaryCrossEntropy(Loss):
     @staticmethod
     def df(x, y):
         x = np.transpose(x, (0, 2, 3, 1))
-        res = np.zeros_like(x)
+        res = np.zeros_like(x, dtype='float64')
         x += 10**(-10)
         for batch_el in range(np.shape(res)[0]):
             res[batch_el] = (-y[batch_el] / (x[batch_el] + 10**(-7)) + (1 - y[batch_el]) / (1 - x[batch_el] - 10**(-7))) / np.size(res[batch_el])
@@ -248,8 +248,8 @@ class Dense(Layer):
     def Initializer(self, prev_lay, next_lay, init_type):
         init = super().initializer_dic[init_type]
         self.in_dim = prev_lay.out_dim
-        self.w = np.zeros((self.out_dim, self.in_dim))
-        self.b = np.zeros(self.out_dim)
+        self.w = np.zeros((self.out_dim, self.in_dim), dtype='float64')
+        self.b = np.zeros(self.out_dim, dtype='float64')
         self.shape_w = np.shape(self.w)
         self.w = init(self.shape_w, next_lay.out_dim)
 
@@ -271,7 +271,7 @@ class MaxPooling(Layer):
 
     def ForwardProp(self, inputs):
         self.x = inputs
-        self.y = np.zeros((*np.shape(self.x)[:2], np.shape(self.x)[2] // self.pool_size[0], np.shape(self.x)[3] // self.pool_size[1]))
+        self.y = np.zeros((*np.shape(self.x)[:2], np.shape(self.x)[2] // self.pool_size[0], np.shape(self.x)[3] // self.pool_size[1]), dtype='float64')
         self.dy = np.zeros(np.shape(self.x))
         for batch in range(np.shape(self.y)[0]):
             for chn in range(np.shape(self.y)[1]):
@@ -310,7 +310,7 @@ class MaxPooling(Layer):
     def BackProp(self, der_w, der_b, jac):
         self.der_w = der_w
         self.der_b = der_b
-        self.jac_to_go = np.zeros_like(self.x)
+        self.jac_to_go = np.zeros_like(self.x, dtype='float64')
         for row in range(np.shape(jac)[2]):
             for col in range(np.shape(jac)[3]):
                 self.jac_to_go[
@@ -342,7 +342,7 @@ class AveragePooling(Layer):
 
     def ForwardProp(self, inputs):
         self.x = inputs
-        self.y = np.zeros((*np.shape(self.x)[:2], np.shape(self.x)[2] // self.pool_size[0], np.shape(self.x)[3] // self.pool_size[1]))
+        self.y = np.zeros((*np.shape(self.x)[:2], np.shape(self.x)[2] // self.pool_size[0], np.shape(self.x)[3] // self.pool_size[1]), dtype='float64')
         for row in range(np.shape(self.y)[2]):
             for col in range(np.shape(self.y)[3]):
                 self.y[:, :, row, col] = np.average(
@@ -357,7 +357,7 @@ class AveragePooling(Layer):
     def BackProp(self, der_w, der_b, jac):
         self.der_w = der_w
         self.der_b = der_b
-        self.jac_to_go = np.zeros_like(self.x)
+        self.jac_to_go = np.zeros_like(self.x, dtype='float64')
         for row in range(np.shape(jac)[2]):
             for col in range(np.shape(jac)[3]):
                 self.jac_to_go[
@@ -426,8 +426,8 @@ class Convolution2d(Layer):
         k_shape = np.shape(kernel)
         output_rows = (f_shape[2] - k_shape[2]) // strides[2] + 1
         output_cols = (f_shape[3] - k_shape[3]) // strides[3] + 1
-        output = np.zeros((f_shape[0], k_shape[1], output_rows, output_cols))
-        dout_dw = np.zeros((f_shape[0], k_shape[1], k_shape[0], k_shape[2], k_shape[3], output_rows, output_cols))
+        output = np.zeros((f_shape[0], k_shape[1], output_rows, output_cols), dtype='float64')
+        dout_dw = np.zeros((f_shape[0], k_shape[1], k_shape[0], k_shape[2], k_shape[3], output_rows, output_cols), dtype='float64')
         for batch_el in range(0, np.shape(output)[0], strides[0]):
             for row in range(output_rows):
                 for col in range(output_cols):
@@ -453,7 +453,7 @@ class Convolution2d(Layer):
             col_frame = (self.kernel_dim[3] - 1) // 2
             shape = (np.shape(self.x)[0], np.shape(self.x)[1], np.shape(self.x)[2] + row_frame * 2,
                      np.shape(self.x)[3] + col_frame * 2)
-            _x = np.zeros(shape)
+            _x = np.zeros(shape, dtype='float64')
             _x[:, :, row_frame:shape[2]-row_frame, col_frame:shape[3]-col_frame] += self.x
             self.x = _x
         assert not ((np.shape(self.x)[2] - self.kernel_dim[2]) % self.strides[2] != 0 or \
@@ -463,13 +463,13 @@ class Convolution2d(Layer):
 
     def BackProp(self, der_w, der_b, jac):  # jac - (batch_size, channels, rows, columns)
         jac = np.reshape(jac, np.shape(self.y))
-        df_dw = np.zeros((np.shape(self.y)[0], np.shape(self.w)[0], np.shape(self.w)[1], np.shape(self.w)[2], np.shape(self.w)[3]))
+        df_dw = np.zeros((np.shape(self.y)[0], np.shape(self.w)[0], np.shape(self.w)[1], np.shape(self.w)[2], np.shape(self.w)[3]), dtype='float64')
         for batch_el in range(0, np.shape(self.y)[0]):
             for chn in range(0, np.shape(self.y)[1]):
                 for row in range(0, np.shape(self.y)[2]):
                     for col in range(0, np.shape(self.y)[3]):
                         df_dw[batch_el, :, chn, :, :] += self.dy[batch_el, chn, :, :, :, row, col] * jac[batch_el, chn, row, col]
-        self.jac_to_go = np.zeros_like(self.x)
+        self.jac_to_go = np.zeros_like(self.x, dtype='float64')
         for batch_el in range(np.shape(self.x)[0]):
             for chn in range(0, np.shape(self.x)[1]):
                 for row in range(0, np.shape(self.x)[2]):
@@ -482,7 +482,6 @@ class Convolution2d(Layer):
                                         y_col = max(ceil((col - np.shape(self.w)[3]) / self.strides[3]), 0)
                                         self.jac_to_go[batch_el, chn, row, col] += self.w[chn, k_chn, k_row, k_col] * jac[batch_el, k_chn, y_row, y_col]
         der_w.append(np.reshape(np.average(df_dw, axis=0), -1))
-        print(np.max(df_dw))
         self.der_w = der_w
         self.der_b = der_b
 
@@ -558,8 +557,6 @@ class Model:
         self.iter_start_time = 0
         self.start_time = 0
         self.iteration = 0
-        self.speed = 0
-        self.speed_now = None
 
     def add(self, layer):
         """Method to add layers into your model.
@@ -620,7 +617,6 @@ class Model:
             self.der_w.clear()
             self.der_b.clear()
             self.iteration += 1
-            self._verbose()
 
     def exploit(self, data):
         self.model[0].ForwardProp(data)
@@ -628,30 +624,6 @@ class Model:
             self.model[i].ForwardProp(self.model[i - 1].y)
         self.model_output = self.model[len(self.model) - 1].y
 
-    def _verbose(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print('Iteration %d/%d:' % (self.iteration, self.max_iter))
-        self.progress_bar()
-
-    def progress_bar(self):
-        self.iter_time = datetime.datetime.now() - self.iter_start_time
-        self.iter_time_int = self.iter_time.seconds + self.iter_time.microseconds * 10**(-6)
-        try:
-            self.iter_time_int += self.iter_time.minutes * 60
-            self.iter_time_int += self.iter_time.hours * 3600
-        except Exception:
-            pass
-        self.speed_now = 1 / self.iter_time_int
-        self.percentage = round(self.iteration / self.max_iter * 100)
-        self.speed = round(self.speed_now * 0.7 + self.speed * 0.3, 2)
-        self.time_left = datetime.timedelta(seconds=(self.max_iter - self.iteration) / self.speed)
-        self.time_pass = datetime.datetime.now() - self.start_time
-        percent_string = ' '*49 + str(self.percentage) + '%'
-        percent_string = percent_string + ' '*(102 - len(percent_string))
-        print(percent_string)
-        print('[' + '='*self.percentage + ' '*(100-self.percentage) + ']')
-        print('Estimated time to reach max_iter point: ' + str(self.time_left))
-        print('Time passed: ' + str(self.time_pass))
 
 class EarlyStopping(Model):
     def __init__(self, monitor='val_loss', min_delta=0, patience=0, verbose=False, mode='auto', delay=1):
@@ -681,6 +653,8 @@ class EarlyStopping(Model):
         self.iter_to_abort = self.patience
         self.iteration = -1
         self.is_changing = True
+        self.speed = 0
+        self.speed_now = None
         assert not ((self.monitor != 'val_loss' and self.monitor != 'val_acc') or \
             (self.mode != 'auto' and self.mode != 'min' and self.mode != 'max')), 'Wrong value.'
         if (self.mode == 'auto' and self.monitor == 'val_loss') or self.mode == 'min':
@@ -715,7 +689,9 @@ class EarlyStopping(Model):
             return self._is_changing()
 
     def _verbose_is_changing(self):
-        print('%s: %d' % (self.full_mon_value, self.mon_value))
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print('Iteration %d/%d:' % (self.iteration, self.max_iter))
+        print('%s: %d' % (self.full_mon_value, self.mon_value) + '%')
         res = self._is_changing()
         if self.iteration % self.delay == 0:
             print('Is changing: ' + str(self.is_changing))
@@ -729,6 +705,7 @@ class EarlyStopping(Model):
                 print('Iterations to stop left: N/A')
             else:
                 print('Iterations to stop left: %d' % (self.iter_to_abort))
+        self.progress_bar()
         return res
 
     def _is_changing(self):
@@ -747,3 +724,22 @@ class EarlyStopping(Model):
                 return True
         else:
             return True
+
+    def progress_bar(self):
+        self.iter_time = datetime.datetime.now() - self.iter_start_time
+        self.iter_time_int = self.iter_time.seconds + self.iter_time.microseconds * 10**(-6)
+        try:
+            self.iter_time_int += self.iter_time.minutes * 60
+            self.iter_time_int += self.iter_time.hours * 3600
+        except Exception:
+            pass
+        self.speed_now = 1 / self.iter_time_int
+        self.percentage = round(self.iteration / self.max_iter * 100)
+        self.speed = round(self.speed_now * 0.7 + self.speed * 0.3, 2)
+        self.time_left = datetime.timedelta(seconds=(self.max_iter - self.iteration) / self.speed)
+        self.time_pass = datetime.datetime.now() - self.start_time
+        percent_string = ' '*49 + str(self.percentage) + '%'
+        print(percent_string)
+        print('[' + '='*self.percentage + ' '*(100-self.percentage) + ']')
+        print('Estimated time to reach max_iter point: ' + str(self.time_left))
+        print('Time passed: ' + str(self.time_pass))
