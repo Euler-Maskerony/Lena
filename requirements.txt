@@ -1,2 +1,5 @@
 numpy
+#for pip
+mnist
+#for pacman
 python-mnist

@@ -2,7 +2,7 @@ import numpy as np
 import mnist
 from Lena import Activation, Dense, Dropout, Model, Convolution2d, MaxPooling, AveragePooling, Input, EarlyStopping
 
-VAL_SIZE = 10
+VAL_SIZE = 30
 
 x_test = mnist.download_and_parse_mnist_file('t10k-images-idx3-ubyte.gz', 'data/')
 y_test = mnist.download_and_parse_mnist_file('t10k-labels-idx1-ubyte.gz', 'data/')
@@ -32,4 +32,4 @@ model.add(Dropout(0.78))
 model.add(Dense(10))
 model.add(Activation('softmax'))
 model.comp('gradient_descent', 'binary_crossentropy', 'xavier')
-model.fit(x_train, y_train, (x_val, y_val), early_stopping=early_stop, batch_size=1, max_iter=100)
+model.fit(x_train, y_train, (x_val, y_val), early_stopping=early_stop, batch_size=1, max_iter=1000)
