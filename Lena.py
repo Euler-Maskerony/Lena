@@ -165,12 +165,17 @@ class Initializer:
         )
         return weights
 
+    @staticmethod
+    def none(*args):
+        return np.zeros(args[0])
+
 
 class Layer:
     initializer_dic = {
         'uniform': Initializer.uniform,
         'xavier': Initializer.xavier,
-        'xe': Initializer.xe
+        'xe': Initializer.xe,
+        'None': Initializer.none
     }
 
 
@@ -183,6 +188,7 @@ class Activation(Layer):
         self.der_w = None
         self.der_b = None
         self.jac_to_go = None
+        self.type = 'Activation_' + self.act_func
         self.activation_dic = {
             'sigmoid': Sigmoid(),
             'tanh': Tanh(),
@@ -224,6 +230,7 @@ class Dense(Layer):
         self.der_w = None
         self.der_b = None
         self.jac_to_go = None
+        self.type = 'Dense_' + str(self.out_dim) + '_' + str(self.use_bias)
 
     def ForwardProp(self, inputs):
         self.x = inputs  # (batch_size; input; 1; 1)
@@ -268,6 +275,7 @@ class MaxPooling(Layer):
         self.x = None
         self.der_w = None
         self.der_b = None
+        self.type = 'MaxPooling_' + '%dx%d' % (pool_size[0], pool_size[1])
 
     def ForwardProp(self, inputs):
         self.x = inputs
@@ -339,6 +347,7 @@ class AveragePooling(Layer):
         self.x = None
         self.der_w = None
         self.der_b = None
+        self.type = 'AveragePooling_' + '%dx%d' % (pool_size[0], pool_size[1])
 
     def ForwardProp(self, inputs):
         self.x = inputs
@@ -360,12 +369,14 @@ class AveragePooling(Layer):
         self.jac_to_go = np.zeros_like(self.x, dtype='float64')
         for row in range(np.shape(jac)[2]):
             for col in range(np.shape(jac)[3]):
+                self.jac_to_go = np.transpose(self.jac_to_go, (2, 3, 0, 1))
                 self.jac_to_go[
-                    :,
-                    :,
                     row*self.pool_size[0]:row*self.pool_size[0]+self.pool_size[0],
-                    col*self.pool_size[1]:col*self.pool_size[1]+self.pool_size[1]
+                    col*self.pool_size[1]:col*self.pool_size[1]+self.pool_size[1],
+                    :,
+                    :
                 ] = jac[:, :, row, col] / (self.pool_size[0] * self.pool_size[1])
+                self.jac_to_go = np.transpose(self.jac_to_go, (2, 3, 0, 1))
 
 class Dropout(Layer):
     def __init__(self, keep_prob):
@@ -379,6 +390,7 @@ class Dropout(Layer):
         self.jac_to_go = None
         self.der_w = None
         self.der_b = None
+        self.type = 'Dropout' + str(self.keep_prob)
 
     def ForwardProp(self, inputs):
         self.dy = np.random.uniform(0, 1, size=np.shape(inputs)) <=self.keep_prob
@@ -417,8 +429,9 @@ class Convolution2d(Layer):
         self.dy = None
         self.jac_to_go = None
         self.shape_w = None
-        self.der_w = []
-        self.der_b = []
+        self.der_w = None
+        self.der_b = None
+        self.type = 'Convolution2D_' + '%dx%dx%d' % (kernel_dim[0], kernel_dim[1], kernel_dim[2])
 
     @staticmethod
     def conv(feature_map, kernel, strides):
@@ -506,6 +519,7 @@ class Input(Layer):
             self.channels = 1
         else:
             self.channels = self.out_dim[0]
+        self.type = 'Input' + str(self.out_dim)
 
     def ForwardProp(self, inputs):
         if isinstance(self.out_dim, int):
@@ -526,6 +540,7 @@ class Output(Layer):
         self.der_b = []
         self.y = None
         self.jac_to_go = None
+        self.type = 'Output' + str(self.in_dim)
 
     def ForwardProp(self, inputs):
         self.y = inputs
@@ -557,6 +572,7 @@ class Model:
         self.iter_start_time = 0
         self.start_time = 0
         self.iteration = 0
+        self.type = None
 
     def add(self, layer):
         """Method to add layers into your model.
@@ -566,7 +582,7 @@ class Model:
         """
         self.model.append(layer)
 
-    def comp(self, optimizer, loss, init):
+    def comp(self, optimizer, loss, init=None):
         """Method to compile your model.
 
         Args:
@@ -574,6 +590,7 @@ class Model:
             loss (string): Type of loss function. Now availbale: binary_crossentropy
             init (string): Initialization type of ALL weights of Dense layers in your model. Now available: uniform, xavier, xe.
         """
+        init = str(init)
         model_comp = list(filter(lambda layer: not isinstance(layer, (Activation, MaxPooling, AveragePooling, Dropout)), self.model))
         self.model.append(Output(model_comp[len(model_comp) - 1].out_dim))
         model_comp.append(self.model[len(self.model) - 1])
@@ -581,6 +598,12 @@ class Model:
             model_comp[lay].Initializer(model_comp[lay - 1], model_comp[lay + 1], init)
         self.loss_func = self.loss_dic[loss]
         self.optimimzer = Optimizer(optimizer, self.model)
+        if Convolution2d in self.model:
+            self.type = 'ConvolutionNN'
+        elif Dense in self.model and not(Convolution2d in self.model):
+            self.type = 'FullyConnectedNN'
+        else:
+            self.type = 'UnknownTypeNN'
 
     def fit(self, train_data, train_labels, val_data, early_stopping=lambda *args: True, batch_size=1, max_iter=100):
         """Method to fit your model.
@@ -735,7 +758,7 @@ class EarlyStopping(Model):
             pass
         self.speed_now = 1 / self.iter_time_int
         self.percentage = round(self.iteration / self.max_iter * 100)
-        self.speed = round(self.speed_now * 0.7 + self.speed * 0.3, 2)
+        self.speed = self.speed_now * 0.9 + self.speed * 0.1
         self.time_left = datetime.timedelta(seconds=(self.max_iter - self.iteration) / self.speed)
         self.time_pass = datetime.datetime.now() - self.start_time
         percent_string = ' '*49 + str(self.percentage) + '%'
@@ -743,3 +766,34 @@ class EarlyStopping(Model):
         print('[' + '='*self.percentage + ' '*(100-self.percentage) + ']')
         print('Estimated time to reach max_iter point: ' + str(self.time_left))
         print('Time passed: ' + str(self.time_pass))
+
+
+class ModelCheckpointMgr():
+    def __init__(self, model, delay, mode):
+        self.model = model
+        self.delay = delay
+        self.mode = mode
+        self.filename = None
+        self.dir = None
+
+    def Import(self, filename=None, _dir='/checkpoints/'):
+        if _dir[len(_dir)-1] != '/':
+            self.dir = _dir + '/'
+        else:
+            self.dir = _dir
+        if filename == None:
+            self.filename = self.model.type + str(datetime.datetime.now()).replace(':', '') + '.txt'
+        else:
+            self.filename = filename
+        with open(self.dir+self.filename, 'w') as f:
+            for layer in range(len(self.model)):
+                f.write(layer.type + '/n')
+            f.write('>' + '/n')
+            for layer in range(len(self.model)):
+                layer.w = np.reshape(layer.w, -1)
+                for weight in range(np.shape(layer.w)[0]):
+                    f.write(str(weight) + ',')
+                f.write('/n')
+
+    def Export(self, filename, _dir='/checkpoints/'):
+        pass
