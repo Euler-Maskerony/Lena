@@ -210,10 +210,10 @@ class Activation(Layer):
 
 class Dense(Layer):
     def __init__(self, out_dim, use_bias=True):
-        """Fully connected layer
+        """Fully connected layer.
 
         Args:
-            out_dim (int): Number of neurons in layer
+            out_dim (int): Number of neurons in layer.
             use_bias (bool, optional): Flag for enabling/disabling biases. Defaults to True.
         """
         self.out_dim = out_dim
@@ -335,7 +335,7 @@ class MaxPooling(Layer):
 
 class AveragePooling(Layer):
     def __init__(self, pool_size):
-        """Average pooling layer. It computes average value of all features in pooling window
+        """Average pooling layer. It computes average value of all features in pooling window.
 
         Args:
             pool_size (tuple): 2-d tuple. Adjust size of window pooling will hold in.
@@ -380,7 +380,7 @@ class AveragePooling(Layer):
 
 class Dropout(Layer):
     def __init__(self, keep_prob):
-        """Dropout layer. It sets to zero outputs of layer with certain porbability
+        """Dropout layer. It sets to zero outputs of layer with certain porbability.
 
         Args:
             keep_prob (float): Probability of keeping single output in initial state.
@@ -405,7 +405,7 @@ class Dropout(Layer):
 
 class Convolution2d(Layer):
     def __init__(self, kernel_dim, strides, padding):
-        """2-d convolution layer
+        """2-d convolution layer.
 
         Args:
             kernel_dim (iterable): Size of weights matrix.
@@ -506,10 +506,10 @@ class Convolution2d(Layer):
 
 class Input(Layer):
     def __init__(self, input_dim):
-        """Initial layer of every network
+        """Initial layer of every network.
 
         Args:
-            input_dim (int/iterable): Number of elements of input vector or size of input matrix with number of channels at first position
+            input_dim (int/iterable): Number of elements of input vector or size of input matrix with number of channels at first position.
         """
         self.out_dim = input_dim
         self.y = None
@@ -551,7 +551,7 @@ class Output(Layer):
         self.der_b = []
 
 
-class Model:
+class Model():
     def __init__(self):
         """Your model.
         """
@@ -573,6 +573,12 @@ class Model:
         self.start_time = 0
         self.iteration = 0
         self.type = None
+        self.model_sign = ''
+        self.callbacks = []
+        self.chpoint_dir = None
+        self.chpoint_filename = None
+        self.chpoint_delay = None
+        self.chpoint_max = None
 
     def add(self, layer):
         """Method to add layers into your model.
@@ -586,24 +592,26 @@ class Model:
         """Method to compile your model.
 
         Args:
-            optimizer (string): Type of optimizer. Now available: gradient_descent
-            loss (string): Type of loss function. Now availbale: binary_crossentropy
+            optimizer (string): Type of optimizer. Now available: gradient_descent.
+            loss (string): Type of loss function. Now availbale: binary_crossentropy.
             init (string): Initialization type of ALL weights of Dense layers in your model. Now available: uniform, xavier, xe.
         """
         init = str(init)
-        model_comp = list(filter(lambda layer: not isinstance(layer, (Activation, MaxPooling, AveragePooling, Dropout)), self.model))
-        self.model.append(Output(model_comp[len(model_comp) - 1].out_dim))
-        model_comp.append(self.model[len(self.model) - 1])
-        for lay in range(1, len(model_comp) - 1):
-            model_comp[lay].Initializer(model_comp[lay - 1], model_comp[lay + 1], init)
+        self.model_comp = list(filter(lambda layer: not isinstance(layer, (Activation, MaxPooling, AveragePooling, Dropout)), self.model))
+        self.model.append(Output(self.model_comp[len(self.model_comp) - 1].out_dim))
+        self.model_comp.append(self.model[len(self.model) - 1])
+        for layer in range(1, len(self.model_comp) - 1):
+            self.model_comp[layer].Initializer(self.model_comp[layer - 1], self.model_comp[layer + 1], init)
         self.loss_func = self.loss_dic[loss]
         self.optimimzer = Optimizer(optimizer, self.model)
-        if Convolution2d in self.model:
+        if any(map(lambda x: type(x) == Convolution2d, self.model)):
             self.type = 'ConvolutionNN'
-        elif Dense in self.model and not(Convolution2d in self.model):
+        elif any(map(lambda x: type(x) == Dense, self.model)) and not any(map(lambda x: type(x) == Convolution2d, self.model)):
             self.type = 'FullyConnectedNN'
         else:
             self.type = 'UnknownTypeNN'
+        for layer in self.model:
+            self.model_sign += layer.type + '/'
 
     def fit(self, train_data, train_labels, val_data, early_stopping=lambda *args: True, batch_size=1, max_iter=100):
         """Method to fit your model.
@@ -640,12 +648,28 @@ class Model:
             self.der_w.clear()
             self.der_b.clear()
             self.iteration += 1
+            for call in self.callbacks:
+                call()
+
 
     def exploit(self, data):
+        """Compute model output on data.
+
+        Args:
+            data (ndarray): Features, input of the model.
+        """
         self.model[0].ForwardProp(data)
         for i in range(1, len(self.model)):
             self.model[i].ForwardProp(self.model[i - 1].y)
         self.model_output = self.model[len(self.model) - 1].y
+
+    def AddCallback(self, callback):
+        """Add callback function which is executed after each iteration.
+
+        Args:
+            callback (callable): Callback.
+        """
+        self.callbacks.append(callback)
 
 
 class EarlyStopping(Model):
@@ -714,7 +738,7 @@ class EarlyStopping(Model):
     def _verbose_is_changing(self):
         os.system('cls' if os.name == 'nt' else 'clear')
         print('Iteration %d/%d:' % (self.iteration, self.max_iter))
-        print('%s: %d' % (self.full_mon_value, self.mon_value) + '%')
+        print('%s: %f' % (self.full_mon_value, self.mon_value))
         res = self._is_changing()
         if self.iteration % self.delay == 0:
             print('Is changing: ' + str(self.is_changing))
@@ -768,32 +792,64 @@ class EarlyStopping(Model):
         print('Time passed: ' + str(self.time_pass))
 
 
-class ModelCheckpointMgr():
-    def __init__(self, model, delay, mode):
+class ModelCheckpointMgr(Model):
+    def __init__(self, model, work_dir='checkpoints/'):
+        """Manager of your model checkpoints.
+
+        Args:
+            model (Model): Your model.
+            work_dir (str, optional): Directory with checkpoint files. Defaults to 'checkpoints/'.
+        """
         self.model = model
-        self.delay = delay
-        self.mode = mode
-        self.filename = None
-        self.dir = None
-
-    def Import(self, filename=None, _dir='/checkpoints/'):
-        if _dir[len(_dir)-1] != '/':
-            self.dir = _dir + '/'
+        self.iteration = 0
+        self.type = None
+        self.chpoint_filename = None
+        if work_dir[len(work_dir)-1] != '/':
+            self.chpoint_dir = work_dir + '/'
         else:
-            self.dir = _dir
-        if filename == None:
-            self.filename = self.model.type + str(datetime.datetime.now()).replace(':', '') + '.txt'
-        else:
-            self.filename = filename
-        with open(self.dir+self.filename, 'w') as f:
-            for layer in range(len(self.model)):
-                f.write(layer.type + '/n')
-            f.write('>' + '/n')
-            for layer in range(len(self.model)):
-                layer.w = np.reshape(layer.w, -1)
-                for weight in range(np.shape(layer.w)[0]):
-                    f.write(str(weight) + ',')
-                f.write('/n')
+            self.chpoint_dir = work_dir
 
-    def Export(self, filename, _dir='/checkpoints/'):
-        pass
+    def MakeCheckpoint(self):
+        """Callback which creates checkpoints. Add it via AddCallback to your model.
+        """
+        if self.model.iteration % self.model.chpoint_delay == 0:
+            list_dir = os.listdir(self.model.chpoint_dir)
+            if len(list(filter(lambda x: x.startswith(self.model.type), list_dir))) == self.model.chpoint_max:
+                list_dir = sorted(list_dir)
+                os.remove(self.chpoint_dir+list_dir.pop(0))
+            self.model.chpoint_filename = self.model.type + str(datetime.datetime.now()).replace(':', '')[11:].split('.')[0] + '.txt'
+            with open(self.model.chpoint_dir+self.model.chpoint_filename, 'w') as f:
+                for layer in self.model.model:
+                    f.write(layer.type + '/')
+                f.write('\n')
+                for layer in self.model.model_comp[1:len(self.model.model_comp)-1]:
+                    w = layer.w
+                    w = np.reshape(layer.w, -1)
+                    for weight in w:
+                        f.write(str(weight) + ',')
+                    f.write('\n')
+
+    def LoadWeights(self, filename):
+        """Load weights to your model from checkpoint file.
+
+        Args:
+            filename (string): Checkpoint file.
+        """
+        with open(self.chpoint_dir+filename, 'r') as f:
+            assert not (self.model.model_sign == f.readline()), 'Model signatures do not match'
+            for lay_i in range(1, len(self.model.model_comp)-1):
+                weights = f.readline().split(',')
+                weights.pop()
+                weights = np.reshape(np.array(weights, dtype='float64'), np.shape(self.model.model_comp[lay_i].w))
+                self.model.model_comp[lay_i].w = weights
+
+    def EnableCheckpoints(self, chpoint_delay=10, chpoint_max=3):
+        """Enable checkpoints.
+
+        Args:
+            chpoint_delay (int, optional): Delay of checkpoint creation. Defaults to 10.
+            chpoint_max (int, optional): Max value of checkpoint files. Defaults to 3.
+        """
+        self.model.chpoint_delay = chpoint_delay
+        self.model.chpoint_max = chpoint_max
+        self.model.chpoint_dir =self.chpoint_dir
