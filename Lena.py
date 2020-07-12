@@ -728,7 +728,7 @@ class EarlyStopping(Model):
         if self.monitor == 'val_loss':
             self.mon_value = round(self.loss_func.f(self.model[len(self.model) - 1].y, val_data[1]), 4)
         else:
-            self.mon_value = round(self.loss_func.accuracy()*100, 4)
+            self.mon_value = round(self.loss_func.accuracy(), 4)
         self.average_mon_value += self.mon_value / self.delay
         if self.verbose:
             return self._verbose_is_changing()
@@ -836,7 +836,7 @@ class ModelCheckpointMgr(Model):
             filename (string): Checkpoint file.
         """
         with open(self.chpoint_dir+filename, 'r') as f:
-            assert not (self.model.model_sign == f.readline()), 'Model signatures do not match'
+            assert self.model.model_sign == f.readline()[:-1], 'Model signatures do not match'
             for lay_i in range(1, len(self.model.model_comp)-1):
                 weights = f.readline().split(',')
                 weights.pop()

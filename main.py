@@ -2,7 +2,7 @@ import numpy as np
 import mnist
 from Lena import Activation, Dense, Dropout, Model, Convolution2d, MaxPooling, AveragePooling, Input, EarlyStopping, ModelCheckpointMgr
 
-VAL_SIZE = 30
+VAL_SIZE = 20
 
 x_test = mnist.download_and_parse_mnist_file('t10k-images-idx3-ubyte.gz', 'data/')
 y_test = mnist.download_and_parse_mnist_file('t10k-labels-idx1-ubyte.gz', 'data/')
@@ -35,7 +35,7 @@ model.comp('gradient_descent', 'binary_crossentropy', 'xavier')
 
 chpoint_mgr = ModelCheckpointMgr(model)
 chpoint_mgr.EnableCheckpoints(chpoint_delay=10, chpoint_max=1)
-chpoint_mgr.LoadWeights('ConvolutionNN215140.txt')
+chpoint_mgr.LoadWeights('ConvolutionNN172251.txt')
 model.AddCallback(chpoint_mgr.MakeCheckpoint)
 
 model.fit(x_train, y_train, (x_val, y_val), early_stopping=early_stop, batch_size=10, max_iter=500)
