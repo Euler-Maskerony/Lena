@@ -13,17 +13,17 @@ x_test, x_train = x_test[:, np.newaxis, :, :]/255, x_train[:, np.newaxis, :, :]/
 x_val, y_val = x_test[:VAL_SIZE], y_test[:VAL_SIZE]
 x_test, y_test = x_test[VAL_SIZE:], y_test[VAL_SIZE:]
 
-early_stop = EarlyStopping(monitor='val_loss', patience=10, verbose=True, delay=3)
+early_stop = EarlyStopping(monitor='val_loss', patience=10, verbose=True, delay=30)
 
 model = Model()
 model.add(Input((1, 28, 28)))
-model.add(Convolution2d([10, 5, 5], [1, 1, 1, 1], padding='SAME'))
+model.add(Convolution2d([10, 5, 5], padding='SAME'))
 model.add(Activation('sigmoid'))
 model.add(MaxPooling((2, 2)))
-model.add(Convolution2d([15, 5, 5], [1, 1, 1, 1], padding='SAME'))
+model.add(Convolution2d([15, 5, 5], padding='SAME'))
 model.add(Activation('sigmoid'))
 model.add(MaxPooling((2, 2)))
-model.add(Convolution2d([20, 6, 6], [1, 1, 1, 1], padding='VALID'))
+model.add(Convolution2d([20, 6, 6], padding='VALID'))
 model.add(Activation('relu'))
 model.add(MaxPooling((2, 2)))
 model.add(Dense(20))
@@ -35,7 +35,7 @@ model.comp('gradient_descent', 'binary_crossentropy', 'xavier')
 
 chpoint_mgr = ModelCheckpointMgr(model)
 chpoint_mgr.EnableCheckpoints(chpoint_delay=10, chpoint_max=1)
-chpoint_mgr.LoadWeights('ConvolutionNN172251.txt')
+chpoint_mgr.LoadWeights('ConvolutionNN013533.txt')
 model.AddCallback(chpoint_mgr.MakeCheckpoint)
 
-model.fit(x_train, y_train, (x_val, y_val), early_stopping=early_stop, batch_size=10, max_iter=500)
+model.fit(x_train, y_train, (x_val, y_val), early_stopping=early_stop, batch_size=100, max_iter=5000)

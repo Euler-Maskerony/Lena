@@ -404,14 +404,13 @@ class Dropout(Layer):
 
 
 class Convolution2d(Layer):
-    def __init__(self, kernel_dim, strides, padding):
+    def __init__(self, kernel_dim, padding):
         """2-d convolution layer.
 
         Args:
             kernel_dim (iterable): Size of weights matrix.
             First value - number of output channels of layer.
             Second and third values - numbers of rows and columns of kernel respectivly.
-            strides (iterable): Steps of kernel along each axis of input feature map.
             padding (string): 'SAME' if you want feature map doesn't change it's size and 'VALID' otherwise.
         """
         assert not ((kernel_dim[1] % 2 == 0 or kernel_dim[2] % 2 == 0) and padding == 'SAME'), 'Kernel with SAME ' \
@@ -421,7 +420,6 @@ class Convolution2d(Layer):
         self.out_dim = self.channels
         self.use_bias = False
         self.padding = padding
-        self.strides = strides  # (batch_size, channels, rows, columns)
         self.kernel_dim = list(kernel_dim)  # (channels_in, channels_out, row, column)
         self.x = None
         self.w = None
@@ -434,66 +432,62 @@ class Convolution2d(Layer):
         self.type = 'Convolution2D_' + '%dx%dx%d' % (kernel_dim[0], kernel_dim[1], kernel_dim[2])
 
     @staticmethod
-    def conv(feature_map, kernel, strides):
+    def conv(feature_map, kernel):
         f_shape = np.shape(feature_map)
         k_shape = np.shape(kernel)
-        output_rows = (f_shape[2] - k_shape[2]) // strides[2] + 1
-        output_cols = (f_shape[3] - k_shape[3]) // strides[3] + 1
+        output_rows = (f_shape[2] - k_shape[2]) + 1
+        output_cols = (f_shape[3] - k_shape[3]) + 1
         output = np.zeros((f_shape[0], k_shape[1], output_rows, output_cols), dtype='float64')
-        dout_dw = np.zeros((f_shape[0], k_shape[1], k_shape[0], k_shape[2], k_shape[3], output_rows, output_cols), dtype='float64')
-        for batch_el in range(0, np.shape(output)[0], strides[0]):
+        for chn in range(np.shape(output)[1]):
             for row in range(output_rows):
                 for col in range(output_cols):
-                    for chn in range(0, np.shape(output)[1], strides[1]):
-                        output[batch_el, chn, row, col] = np.sum(feature_map[
-                            batch_el,
-                            :,
-                            row*strides[2]:row*strides[2]+k_shape[2],
-                            col*strides[3]:col*strides[3]+k_shape[3]
-                        ] * kernel[:, chn, :, :])
-                        dout_dw[batch_el, chn, :, :, :, row, col] = feature_map[
-                            batch_el,
-                            :,
-                            row*strides[2]:row*strides[2]+k_shape[2],
-                            col*strides[3]:col*strides[3]+k_shape[3]
-                        ]
-        return output, dout_dw
+                    output[:, chn, row, col] = np.sum(feature_map[
+                        :,
+                        :,
+                        row:row+k_shape[2],
+                        col:col+k_shape[3]
+                    ] * kernel[:, chn, :, :], (1, 2, 3))
+        return output
 
     def ForwardProp(self, inputs):
         self.x = inputs
         if self.padding == 'SAME':
-            row_frame = (self.kernel_dim[2] - 1) // 2
-            col_frame = (self.kernel_dim[3] - 1) // 2
-            shape = (np.shape(self.x)[0], np.shape(self.x)[1], np.shape(self.x)[2] + row_frame * 2,
-                     np.shape(self.x)[3] + col_frame * 2)
+            row_frame = ((np.shape(self.x)[2] - 1) + self.kernel_dim[2] - np.shape(self.x)[2]) // 2
+            col_frame = ((np.shape(self.x)[3] - 1) + self.kernel_dim[3] - np.shape(self.x)[3]) // 2
+            shape = (np.shape(self.x)[0], np.shape(self.x)[1], np.shape(self.x)[2] + row_frame*2, np.shape(self.x)[3] + col_frame*2)
             _x = np.zeros(shape, dtype='float64')
-            _x[:, :, row_frame:shape[2]-row_frame, col_frame:shape[3]-col_frame] += self.x
+            _x[:, :, row_frame:-row_frame, col_frame:-col_frame] += self.x
             self.x = _x
-        assert not ((np.shape(self.x)[2] - self.kernel_dim[2]) % self.strides[2] != 0 or \
-               (np.shape(self.x)[3] - self.kernel_dim[3]) % self.strides[3] != 0), \
-            'Invalid strides value'
-        self.y, self.dy = self.conv(self.x, self.w, self.strides)
+        self.y = self.conv(self.x, self.w)
 
     def BackProp(self, der_w, der_b, jac):  # jac - (batch_size, channels, rows, columns)
-        jac = np.reshape(jac, np.shape(self.y))
         df_dw = np.zeros((np.shape(self.y)[0], np.shape(self.w)[0], np.shape(self.w)[1], np.shape(self.w)[2], np.shape(self.w)[3]), dtype='float64')
-        for batch_el in range(0, np.shape(self.y)[0]):
-            for chn in range(0, np.shape(self.y)[1]):
-                for row in range(0, np.shape(self.y)[2]):
-                    for col in range(0, np.shape(self.y)[3]):
-                        df_dw[batch_el, :, chn, :, :] += self.dy[batch_el, chn, :, :, :, row, col] * jac[batch_el, chn, row, col]
+        for chn in range(np.shape(self.w)[0]):
+            for chn_k in range(np.shape(self.w)[1]):
+                for row in range(np.shape(self.w)[2]):
+                    for col in range(np.shape(self.w)[3]):
+                        df_dw[:, chn, chn_k, row, col] += np.sum(self.x[
+                            :,
+                            chn,
+                            row:row+np.shape(jac)[2],
+                            col:col+np.shape(jac)[3]
+                        ] * jac[:, chn_k, :, :], (1, 2))
         self.jac_to_go = np.zeros_like(self.x, dtype='float64')
-        for batch_el in range(np.shape(self.x)[0]):
-            for chn in range(0, np.shape(self.x)[1]):
-                for row in range(0, np.shape(self.x)[2]):
-                    for col in range(0, np.shape(self.x)[3]):
-                        for k_chn in range(np.shape(self.w)[1]):
-                            for k_row in range(np.shape(self.w)[2]):
-                                for k_col in range(np.shape(self.w)[3]):
-                                    if (row - k_row >= 0) and (col - k_col >= 0):
-                                        y_row = max(ceil((row - np.shape(self.w)[2]) / self.strides[2]), 0)
-                                        y_col = max(ceil((col - np.shape(self.w)[3]) / self.strides[3]), 0)
-                                        self.jac_to_go[batch_el, chn, row, col] += self.w[chn, k_chn, k_row, k_col] * jac[batch_el, k_chn, y_row, y_col]
+        conv_w = self.w[:, :, ::-1, ::-1]
+        row_frame = np.shape(self.w)[2]-1
+        col_frame = np.shape(self.w)[3]-1
+        conv_jac = np.zeros((*np.shape(jac)[:2], np.shape(jac)[2]+row_frame*2, np.shape(jac)[3]+col_frame*2))
+        conv_jac[:, :, row_frame:-row_frame, col_frame:-col_frame] += jac
+        for chn in range(np.shape(self.x)[1]):
+            for row in range(np.shape(self.x)[2]):
+                for col in range(np.shape(self.x)[3]):
+                    for chn_k in range(np.shape(self.w)[1]):
+                        self.jac_to_go[:, chn, row, col] = np.sum(conv_jac[
+                            :,
+                            chn_k,
+                            row:row+np.shape(self.w)[2],
+                            col:col+np.shape(self.w)[3],
+                        ] * conv_w[chn, chn_k, :, :], (1, 2))
         der_w.append(np.reshape(np.average(df_dw, axis=0), -1))
         self.der_w = der_w
         self.der_b = der_b
@@ -644,7 +638,7 @@ class Model():
                 )
             self.grad_w = np.array(self.model[i].der_w)
             self.grad_b = np.array(self.model[i].der_b)
-            self.model = self.optimimzer(jac_w=self.grad_w, jac_b=self.grad_b, step=0.5)
+            self.model = self.optimimzer(jac_w=self.grad_w, jac_b=self.grad_b, step=1)
             self.der_w.clear()
             self.der_b.clear()
             self.iteration += 1
@@ -747,7 +741,7 @@ class EarlyStopping(Model):
             else:
                 print('Iterations to stop left: N/A')
         else:
-            print('Is changing: /%s/ *Not updated* Update after %d epochs' % (str(self.is_changing), self.delay-(self.iteration % self.delay)))
+            print('Is changing: /%s/ *Not updated* Update after %d rechecks' % (str(self.is_changing), self.delay-(self.iteration % self.delay)))
             if self.iter_to_abort == self.patience:
                 print('Iterations to stop left: N/A')
             else:
@@ -783,8 +777,8 @@ class EarlyStopping(Model):
         self.speed_now = 1 / self.iter_time_int
         self.percentage = round(self.iteration / self.max_iter * 100)
         self.speed = self.speed_now * 0.9 + self.speed * 0.1
-        self.time_left = datetime.timedelta(seconds=(self.max_iter - self.iteration) / self.speed)
-        self.time_pass = datetime.datetime.now() - self.start_time
+        self.time_left = str(datetime.timedelta(seconds=(self.max_iter - self.iteration) / self.speed)).split('.')[0]
+        self.time_pass = str(datetime.datetime.now() - self.start_time).split('.')[0]
         percent_string = ' '*49 + str(self.percentage) + '%'
         print(percent_string)
         print('[' + '='*self.percentage + ' '*(100-self.percentage) + ']')
