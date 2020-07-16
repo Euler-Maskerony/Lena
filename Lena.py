@@ -657,6 +657,8 @@ class Model():
             self.model[i].ForwardProp(self.model[i - 1].y)
         self.model_output = self.model[len(self.model) - 1].y
 
+        return self.model_output
+
     def AddCallback(self, callback):
         """Add callback function which is executed after each iteration.
 

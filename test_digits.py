@@ -2,18 +2,9 @@ import numpy as np
 import mnist
 from Lena import Activation, Dense, Dropout, Model, Convolution2d, MaxPooling, AveragePooling, Input, EarlyStopping, ModelCheckpointMgr
 
-VAL_SIZE = 100
-
 x_test = mnist.download_and_parse_mnist_file('t10k-images-idx3-ubyte.gz', 'data/')
 y_test = mnist.download_and_parse_mnist_file('t10k-labels-idx1-ubyte.gz', 'data/')
-x_train = mnist.download_and_parse_mnist_file('train-images-idx3-ubyte.gz', 'data/')
-y_train = mnist.download_and_parse_mnist_file('train-labels-idx1-ubyte.gz', 'data/')
-y_test, y_train = np.eye(10)[y_test], np.eye(10)[y_train]
-x_test, x_train = x_test[:, np.newaxis, :, :]/255, x_train[:, np.newaxis, :, :]/255
-x_val, y_val = x_test[:VAL_SIZE], y_test[:VAL_SIZE]
-x_test, y_test = x_test[VAL_SIZE:], y_test[VAL_SIZE:]
-
-early_stop = EarlyStopping(monitor='val_loss', patience=10, verbose=True, delay=30)
+x_test= x_test[:, np.newaxis, :, :]/255
 
 model = Model()
 model.add(Input((1, 28, 28)))
@@ -34,8 +25,9 @@ model.add(Activation('softmax'))
 model.comp('gradient_descent', 'binary_crossentropy')
 
 chpoint_mgr = ModelCheckpointMgr(model)
-chpoint_mgr.EnableCheckpoints(chpoint_delay=10, chpoint_max=1)
-chpoint_mgr.LoadWeights('ConvolutionNN013533.txt')
-model.AddCallback(chpoint_mgr.MakeCheckpoint)
+chpoint_mgr.LoadWeights('ConvolutionNN002006.txt')
 
-model.fit(x_train, y_train, (x_val, y_val), early_stopping=early_stop, batch_size=100, max_iter=6000)
+output = model.exploit(x_test)
+accuracy = np.average(np.argmax(np.reshape(output, (np.shape(x_test)[0], -1)), axis=1) == y_test)
+
+print(accuracy)
