@@ -35,7 +35,7 @@ model.comp('gradient_descent', 'binary_crossentropy')
 
 chpoint_mgr = ModelCheckpointMgr(model)
 chpoint_mgr.EnableCheckpoints(chpoint_delay=10, chpoint_max=1)
-chpoint_mgr.LoadWeights('ConvolutionNN013533.txt')
+chpoint_mgr.LoadWeights('ConvolutionNN002006.txt')
 model.AddCallback(chpoint_mgr.MakeCheckpoint)
 
 model.fit(x_train, y_train, (x_val, y_val), early_stopping=early_stop, batch_size=100, max_iter=6000)
