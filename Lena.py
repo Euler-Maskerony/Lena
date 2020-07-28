@@ -238,8 +238,8 @@ class Dense(Layer):
                 np.transpose(np.dot(self.w, np.transpose(self.x, (0, 2, 1, 3))), (1, 2, 3, 0)) + self.b * int(self.use_bias),
                 (0, 3, 1, 2)
                 )
-        self.dy_dw = np.transpose(np.ones((np.shape(self.w)[0], np.shape(self.x)[0], np.shape(self.w)[1])) * self.x[:, :, 0, 0], (1, 0, 2))
-        self.dy_db = np.ones((np.shape(self.x)[0], np.shape(self.b)[0])) * int(self.use_bias)
+        self.dy_dw = np.transpose(np.ones((np.shape(self.w)[0], np.shape(self.x)[0], np.shape(self.w)[1]), dtype='float64') * self.x[:, :, 0, 0], (1, 0, 2))
+        self.dy_db = np.ones((np.shape(self.x)[0], np.shape(self.b)[0]), dtype='float64') * int(self.use_bias)
 
     def BackProp(self, der_w, der_b, jac):
         jac = jac[:, :, 0, 0]
@@ -280,7 +280,7 @@ class MaxPooling(Layer):
     def ForwardProp(self, inputs):
         self.x = inputs
         self.y = np.zeros((*np.shape(self.x)[:2], np.shape(self.x)[2] // self.pool_size[0], np.shape(self.x)[3] // self.pool_size[1]), dtype='float64')
-        self.dy = np.zeros(np.shape(self.x))
+        self.dy = np.zeros(np.shape(self.x), dtype='float64')
         for batch in range(np.shape(self.y)[0]):
             for chn in range(np.shape(self.y)[1]):
                 for row in range(np.shape(self.y)[2]):

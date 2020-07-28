@@ -19,7 +19,6 @@ model.add(Activation('relu'))
 model.add(MaxPooling((2, 2)))
 model.add(Dense(20))
 model.add(Activation('sigmoid'))
-model.add(Dropout(0.78))
 model.add(Dense(10))
 model.add(Activation('softmax'))
 model.comp('gradient_descent', 'binary_crossentropy')
@@ -27,7 +26,11 @@ model.comp('gradient_descent', 'binary_crossentropy')
 chpoint_mgr = ModelCheckpointMgr(model)
 chpoint_mgr.LoadWeights('ConvolutionNN002006.txt')
 
-output = model.exploit(x_test)
-accuracy = np.average(np.argmax(np.reshape(output, (np.shape(x_test)[0], -1)), axis=1) == y_test)
+def digit_rec(data):
+    return int(np.argmax(model.exploit(data), axis=1))
 
-print(accuracy)
+if __name__ == '__main__':
+    output = model.exploit(x_test)
+    accuracy = np.average(np.argmax(np.reshape(output, (np.shape(x_test)[0], -1)), axis=1) == y_test)
+
+    print(accuracy)
