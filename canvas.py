@@ -2,7 +2,6 @@ import pygame
 import numpy as np
 import sys
 from threading import Thread
-import matplotlib.pyplot as plt
 from test_digits import digit_rec, x_test
 from math import pi, e, ceil
 from time import sleep
@@ -33,6 +32,7 @@ BLACK = (0, 0, 0)
 exit_flag = False
 
 font = pygame.font.Font(None, 30)
+digit_font = pygame.font.Font(None, 100)
 screen = pygame.display.set_mode(SC_SIZE)
 cv_frame = pygame.Surface(tuple(map(lambda a, b: a+b, CV_SIZE, [CV_FRAME]*2)))
 canvas = pygame.Surface(CV_SIZE)
@@ -44,7 +44,8 @@ clear_text = font.render('Clear', 1, BLACK)
 exit_button_frame = pygame.Surface(tuple(map(lambda a, b: a+b, BT_SIZE, [BT_FRAME*2]*2)))
 exit_button = pygame.Surface(BT_SIZE)
 exit_text = font.render('Exit', 1, BLACK)
-def draw(clear_button_color, exit_button_color):
+
+def draw(clear_button_color, exit_button_color, digit_rc):
     screen.fill(SCREEN_CLR)
     cv_frame.fill(FRAME_CLR)
     screen.blit(cv_frame, tuple(map(lambda a, b: a-b, CV_POS, [CV_FRAME]*2)))
@@ -63,8 +64,10 @@ def draw(clear_button_color, exit_button_color):
     screen.blit(exit_button_frame, tuple(map(lambda a, b: a-b, EXIT_BT_POS, [BT_FRAME]*2)))
     screen.blit(exit_button, EXIT_BT_POS)
     screen.blit(exit_text, tuple(map(lambda a, b: a+b, EXIT_BT_POS, [13, 5])))
+    digit = digit_font.render(str(digit_rc), 1, BLACK)
+    screen.blit(digit, tuple(map(lambda a, b: a+b, DW_POS, [25, 10])))
 
-draw(BUTTON_CLR, BUTTON_CLR)
+draw(BUTTON_CLR, BUTTON_CLR, '1')
 canvas.fill(CANVAS_CLR)
 pygame.display.update()
 
@@ -122,15 +125,16 @@ while True:
     pos = pygame.mouse.get_pos()
     if CV_POS[0] < pos[0] < CV_POS[0] + CV_SIZE[0] and CV_POS[1] < pos[1] < CV_POS[1] + CV_SIZE[1]:
         pygame.mouse.set_cursor(*pygame.cursors.broken_x)
+        draw(BUTTON_CLR, BUTTON_CLR, recognizer.digit_rc)
     elif CLEAR_BT_POS[0] < pos[0] < CLEAR_BT_POS[0] + BT_SIZE[0] and CLEAR_BT_POS[1] < pos[1] < CLEAR_BT_POS[1] + BT_SIZE[1]:
         pygame.mouse.set_cursor(*pygame.cursors.tri_left)
-        draw(BUTTON_CLR_TRGT, BUTTON_CLR)
+        draw(BUTTON_CLR_TRGT, BUTTON_CLR, recognizer.digit_rc)
     elif EXIT_BT_POS[0] < pos[0] < EXIT_BT_POS[0] + BT_SIZE[0] and EXIT_BT_POS[1] < pos[1] < EXIT_BT_POS[1] + BT_SIZE[1]:
         pygame.mouse.set_cursor(*pygame.cursors.tri_left)
-        draw(BUTTON_CLR, BUTTON_CLR_TRGT)
+        draw(BUTTON_CLR, BUTTON_CLR_TRGT, recognizer.digit_rc)
     else:
         pygame.mouse.set_cursor(*pygame.cursors.arrow)
-        draw(BUTTON_CLR, BUTTON_CLR)
+        draw(BUTTON_CLR, BUTTON_CLR, recognizer.digit_rc)
     if pressed[0]:
         if CV_POS[0] < pos[0] < CV_POS[0] + CV_SIZE[0] and CV_POS[1] < pos[1] < CV_POS[1] + CV_SIZE[1]:
             screen.fill(SCREEN_CLR)
@@ -157,14 +161,16 @@ while True:
             screen.blit(exit_button_frame, tuple(map(lambda a, b: a-b, EXIT_BT_POS, [BT_FRAME]*2)))
             screen.blit(exit_button, EXIT_BT_POS)
             screen.blit(exit_text, tuple(map(lambda a, b: a+b, EXIT_BT_POS, [13, 5])))
+            digit = digit_font.render(str(recognizer.digit_rc), 1, BLACK)
+            screen.blit(digit, tuple(map(lambda a, b: a+b, DW_POS, [25, 10])))
         elif CLEAR_BT_POS[0] < pos[0] < CLEAR_BT_POS[0] + BT_SIZE[0] and CLEAR_BT_POS[1] < pos[1] < CLEAR_BT_POS[1] + BT_SIZE[1]:
             canvas.fill(CANVAS_CLR)
-            draw(BUTTON_CLR_PRS, BUTTON_CLR)
+            draw(BUTTON_CLR_PRS, BUTTON_CLR, recognizer.digit_rc)
             cv_data *= 0
             cv_data += 255
             recognizer.digit_hw = cv_data
         elif EXIT_BT_POS[0] < pos[0] < EXIT_BT_POS[0] + BT_SIZE[0] and EXIT_BT_POS[1] < pos[1] < EXIT_BT_POS[1] + BT_SIZE[1]:
-            draw(BUTTON_CLR, BUTTON_CLR_PRS)
+            draw(BUTTON_CLR, BUTTON_CLR_PRS, recognizer.digit_rc)
             exit_flag = True
             sys.exit()
     pygame.display.update()
