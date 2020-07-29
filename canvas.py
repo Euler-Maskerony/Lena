@@ -107,7 +107,6 @@ class Recognizer(Thread):
             if exit_flag:
                 sys.exit()
             self.digit_rc = digit_rec((255-self.digit_hw[np.newaxis, np.newaxis, :, :])/255)
-            print(self.digit_rc)
             sleep(0.5)
 
 
