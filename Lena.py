@@ -6,22 +6,6 @@ import os
 import datetime
 
 
-def ext_dot(a, b):
-    res = np.zeros((a.shape[0], a.shape[1], b.shape[1]), dtype='float64')
-    for batch_el in range(res.shape[0]):
-        for col in range(res.shape[1]):
-            for row in range(res.shape[2]):
-                res[batch_el, col, row] = a[batch_el, col] * b[batch_el, row]
-    return res
-
-
-def gen_mul(a, b):
-    for batch_el in range(b.shape[0]):
-        for row in range(b.shape[1]):
-            a[batch_el, row] *= b[batch_el, row]
-    return a
-
-
 class Optimizer:
     def __init__(self, optimizer_type, model):
         self.model = model
